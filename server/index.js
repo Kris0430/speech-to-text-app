@@ -245,3 +245,4 @@ app.listen(port, () => {
   console.log(`🎤 Using DeepGram HTTPS for speech-to-text`);
   console.log(`⏰ API timeout: 30 seconds`);
 });
+

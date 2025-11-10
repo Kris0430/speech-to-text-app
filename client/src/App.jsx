@@ -1,201 +1,222 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import axios from 'axios'
 
 function App() {
-  const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [transcription, setTranscription] = useState('')
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [transcriptions, setTranscriptions] = useState([])
+	const [message, setMessage] = useState('')
+	const [loading, setLoading] = useState(false)
+	const [transcription, setTranscription] = useState('')
+	const [selectedFile, setSelectedFile] = useState(null)
+	const [transcriptions, setTranscriptions] = useState([])
+	const [dragActive, setDragActive] = useState(false)
+	const [copied, setCopied] = useState(false)
 
-  // Test backend connection
-  const testBackend = async () => {
-    setLoading(true)
-    try {
-      const response = await axios.get('http://localhost:5000')
-      setMessage(response.data.message)
-    } catch (error) {
-      setMessage('Error connecting to backend: ' + error.message)
-    }
-    setLoading(false)
-  }
+	const selectedFileInfo = useMemo(() => {
+		if (!selectedFile) return ''
+		const sizeMb = (selectedFile.size / (1024 * 1024)).toFixed(2)
+		return `${selectedFile.name} · ${sizeMb} MB`
+	}, [selectedFile])
 
-  // Handle file selection
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0]
-    if (file) {
-      // Check if it's an audio file
-      if (file.type.startsWith('audio/')) {
-        setSelectedFile(file)
-        setMessage(`Selected: ${file.name}`)
-      } else {
-        setMessage('Please select an audio file')
-      }
-    }
-  }
+	const testBackend = async () => {
+		setLoading(true)
+		try {
+			const response = await axios.get('http://localhost:5000')
+			setMessage(response.data.message)
+		} catch (error) {
+			setMessage('Error connecting to backend: ' + error.message)
+		}
+		setLoading(false)
+	}
 
-  // Upload and transcribe file
-  const uploadAndTranscribe = async () => {
-    if (!selectedFile) {
-      setMessage('Please select a file first')
-      return
-    }
+	const handleFileSelect = (event) => {
+		const file = event.target.files?.[0]
+		if (file) {
+			if (file.type.startsWith('audio/')) {
+				setSelectedFile(file)
+				setMessage(`Selected: ${file.name}`)
+			} else {
+				setMessage('Please select an audio file')
+			}
+		}
+	}
 
-    setLoading(true)
-    setMessage('')
-    setTranscription('')
+	const onDragOver = (e) => {
+		e.preventDefault()
+		setDragActive(true)
+	}
 
-    const formData = new FormData()
-    formData.append('audio', selectedFile)
+	const onDragLeave = () => {
+		setDragActive(false)
+	}
 
-    try {
-      const response = await axios.post('http://localhost:5000/api/transcribe', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
+	const onDrop = (e) => {
+		e.preventDefault()
+		setDragActive(false)
+		const file = e.dataTransfer.files?.[0]
+		if (file) {
+			if (file.type.startsWith('audio/')) {
+				setSelectedFile(file)
+				setMessage(`Selected: ${file.name}`)
+			} else {
+				setMessage('Please drop an audio file')
+			}
+		}
+	}
 
-      setMessage('File uploaded successfully!')
-      setTranscription(response.data.transcription)
-      
-      // Reset file input
-      setSelectedFile(null)
-      document.getElementById('file-input').value = ''
+	const uploadAndTranscribe = async () => {
+		if (!selectedFile) {
+			setMessage('Please select a file first')
+			return
+		}
 
-    } catch (error) {
-      setMessage('Upload failed: ' + error.message)
-    }
-    setLoading(false)
-  }
+		setLoading(true)
+		setMessage('')
+		setTranscription('')
 
-  // Fetch transcription history
-  const fetchTranscriptions = async () => {
-    try {
-      const response = await axios.get('http://localhost:5000/api/transcriptions')
-      setTranscriptions(response.data)
-      setMessage(`Loaded ${response.data.length} transcriptions`)
-    } catch (error) {
-      setMessage('Failed to load transcriptions')
-    }
-  }
+		const formData = new FormData()
+		formData.append('audio', selectedFile)
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            🎤 Speech to Text
-          </h1>
-          <p className="text-gray-600">Upload audio files and get transcriptions</p>
-        </div>
+		try {
+			const response = await axios.post('http://localhost:5000/api/transcribe', formData, {
+				headers: { 'Content-Type': 'multipart/form-data' }
+			})
 
-        {/* Connection Test */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Connection Status</h2>
-              <p className="text-sm text-gray-600">
-                Backend: http://localhost:5000
-              </p>
-            </div>
-            <button 
-              onClick={testBackend}
-              disabled={loading}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
-            >
-              {loading ? 'Testing...' : 'Test Connection'}
-            </button>
-          </div>
-        </div>
+			setMessage('File uploaded successfully!')
+			setTranscription(response.data.transcription)
+			setSelectedFile(null)
+			const input = document.getElementById('file-input')
+			if (input) input.value = ''
+		} catch (error) {
+			setMessage('Upload failed: ' + error.message)
+		}
+		setLoading(false)
+	}
 
-        {/* File Upload Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Upload Audio File</h2>
-          
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center mb-4">
-            <input
-              type="file"
-              id="file-input"
-              accept="audio/*"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <label 
-              htmlFor="file-input"
-              className="cursor-pointer block"
-            >
-              <div className="text-4xl mb-2">🎵</div>
-              <p className="text-gray-600 mb-2">
-                {selectedFile ? selectedFile.name : 'Click to select audio file'}
-              </p>
-              <p className="text-sm text-gray-500">MP3, WAV, M4A, etc.</p>
-            </label>
-          </div>
+	const fetchTranscriptions = async () => {
+		try {
+			const response = await axios.get('http://localhost:5000/api/transcriptions')
+			setTranscriptions(response.data)
+			setMessage(`Loaded ${response.data.length} transcriptions`)
+		} catch (error) {
+			setMessage('Failed to load transcriptions')
+		}
+	}
 
-          <button 
-            onClick={uploadAndTranscribe}
-            disabled={loading || !selectedFile}
-            className="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg disabled:opacity-50"
-          >
-            {loading ? 'Uploading...' : 'Upload & Transcribe'}
-          </button>
-        </div>
+	const copyTranscription = async () => {
+		if (!transcription) return
+		try {
+			await navigator.clipboard.writeText(transcription)
+			setCopied(true)
+			setTimeout(() => setCopied(false), 1200)
+		} catch {}
+	}
 
-        {/* Transcription Result */}
-        {transcription && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Transcription Result</h2>
-            <div className="bg-gray-50 p-4 rounded border">
-              <p className="text-gray-800 whitespace-pre-wrap">{transcription}</p>
-            </div>
-          </div>
-        )}
+	return (
+		<div className="app">
+			<header className="app-header">
+				<div className="app-header-inner">
+					<div className="brand" role="img" aria-label="Speech to Text brand">
+						<div className="brand-icon">
+							<span>🎤</span>
+						</div>
+						<div>
+							<div className="brand-title">Speech to Text</div>
+							<div className="brand-subtitle">Upload audio and get instant transcripts</div>
+						</div>
+					</div>
+					<button onClick={testBackend} disabled={loading} className="btn btn-secondary">
+						{loading ? 'Testing…' : 'Test Backend'}
+					</button>
+				</div>
+			</header>
 
-        {/* History Section */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Transcription History</h2>
-            <button 
-              onClick={fetchTranscriptions}
-              className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Load History
-            </button>
-          </div>
-          
-          {transcriptions.length > 0 ? (
-            <div className="space-y-4">
-              {transcriptions.map((item) => (
-                <div key={item.id} className="border rounded-lg p-4">
-                  <p className="font-semibold">{item.audio_filename}</p>
-                  <p className="text-gray-600 mt-2">{item.transcription_text}</p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    {new Date(item.created_at).toLocaleString()}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-4">
-              No transcriptions yet. Upload some audio files!
-            </p>
-          )}
-        </div>
+			<main className="container">
+				<div className="main-grid">
+					<section className="card">
+						<h2>Upload audio</h2>
+						<div className="card-sub">MP3, WAV, M4A and more</div>
 
-        {/* Messages */}
-        {message && (
-          <div className={`mt-4 p-3 rounded-lg ${
-            message.includes('Error') || message.includes('failed') 
-              ? 'bg-red-100 border-red-400 text-red-700' 
-              : 'bg-green-100 border-green-400 text-green-700'
-          }`}>
-            {message}
-          </div>
-        )}
-      </div>
-    </div>
-  )
+						<div
+							onDragOver={onDragOver}
+							onDragLeave={onDragLeave}
+							onDrop={onDrop}
+							className={`dropzone${dragActive ? ' drag-active' : ''}`}
+						>
+							<input
+								type="file"
+								id="file-input"
+								accept="audio/*"
+								onChange={handleFileSelect}
+								style={{ display: 'none' }}
+							/>
+							<label htmlFor="file-input" style={{ display: 'block', cursor: 'pointer' }}>
+								<div className="upload-icon">🎵</div>
+								<div className="dropzone-title">
+									{selectedFile ? selectedFileInfo : 'Click to select or drag & drop'}
+								</div>
+								<div className="dropzone-sub">Max 100MB • One file at a time</div>
+							</label>
+						</div>
+
+						<button
+							onClick={uploadAndTranscribe}
+							disabled={loading || !selectedFile}
+							className="btn btn-primary upload-action"
+						>
+							{loading ? 'Uploading…' : 'Upload & Transcribe'}
+						</button>
+
+						{message && (
+							<div className={`msg ${message.includes('Error') || message.includes('failed') ? 'msg-error' : 'msg-success'}`}>
+								{message}
+							</div>
+						)}
+					</section>
+
+					<section className="card">
+						<div className="panel-head">
+							<div className="panel-title">Transcription</div>
+							<button onClick={copyTranscription} disabled={!transcription} className="btn btn-secondary copy-btn">
+								{copied ? 'Copied!' : 'Copy'}
+							</button>
+						</div>
+
+						<div className="transcription-box">
+							{transcription
+								? <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{transcription}</p>
+								: <p className="transcription-empty" style={{ margin: 0 }}>Your transcription will appear here.</p>}
+						</div>
+					</section>
+				</div>
+
+				<section className="card" style={{ marginTop: 24 }}>
+					<div className="history-head">
+						<div className="panel-title">History</div>
+						<button onClick={fetchTranscriptions} className="btn btn-secondary">Load History</button>
+					</div>
+
+					{transcriptions.length > 0 ? (
+						<ul className="history-list">
+							{transcriptions.map((item) => (
+								<li key={item.id} className="history-item">
+									<p className="history-title">{item.audio_filename}</p>
+									<p className="history-text">{item.transcription_text}</p>
+									<p className="history-time">{new Date(item.created_at).toLocaleString()}</p>
+								</li>
+							))}
+						</ul>
+					) : (
+						<p className="history-text" style={{ textAlign: 'center', padding: '16px 0' }}>
+							No transcriptions yet. Upload some audio files!
+						</p>
+					)}
+				</section>
+			</main>
+
+			<footer className="app-footer">
+				Built with React and Vite
+			</footer>
+		</div>
+	)
 }
 
 export default App
